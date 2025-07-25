@@ -1,6 +1,8 @@
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 
+const PLAYER_STORAGE_KEY = 'DAJI_PLAYER'
+
 const cd = $('.cd');
 const heading = $('header h2');
 const cdThumb = $('.cd-thumb');
@@ -11,13 +13,15 @@ const progress = $('.progress')
 const nextBtn = $('.btn-next')
 const prevBtn = $('.btn-prev')
 const randomBtn = $('.btn-random')
-
-
+const repeatBtn = $('.btn-repeat')
+const playlist = $('.playlist')
 
 const app = {
     currentIndex: 0,
     isPlaying: false,
     isRandom: false,
+    isRepeat: false,
+    config: JSON.parse(localStorage.getItem(PLAYER_STORAGE_KEY)) || {},
     songs: [
         {
             name: 'Anh Đã Ổn Hơn',
@@ -69,10 +73,15 @@ const app = {
         }
     ],
 
+    setConfig: function(key, value) {
+        this.config[key] = value
+        localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(this.config))
+    },
+
     render : function() {
-        const html = this.songs.map(song => {
+        const html = this.songs.map((song, index) => {
             return `
-            <div class="song">
+            <div class="song ${index === this.currentIndex ? 'active':' '}" data-index=${index}>
                 <div
                     class="thumb"
                     style="background-image: url('${song.image}')"
@@ -87,7 +96,7 @@ const app = {
             </div>`
         });
 
-        $('.playlist').innerHTML = html.join('')
+        playlist.innerHTML = html.join('')
     },
 
     
@@ -146,14 +155,23 @@ const app = {
             if(audio.duration) {
                 const progressPercent = Math.floor(audio.currentTime / audio.duration * 100)
                 progress.value = progressPercent
+                _this.updateProgressColor(progressPercent)
             }
+        }
+        //
+        progress.oninput = function(e) {
+            const percent = e.target.value
+            _this.updateProgressColor(percent);
         }
         //Xu ly khi tua bai hat
         progress.onchange = function(e) {
             const percent = e.target.value
             const seekTime = (percent/100) * audio.duration
             audio.currentTime = seekTime;
+            _this.updateProgressColor(percent)
         }
+
+
         //Xu ly khi next bai hat
         nextBtn.onclick = function() {
             if(_this.isRandom) {
@@ -162,6 +180,8 @@ const app = {
                 _this.nextSong();
             } 
             audio.play()
+            _this.render()
+            _this.scrollToActiveSong()
         }
         //Xu ly prev bai hat
         prevBtn.onclick = function() {
@@ -171,15 +191,46 @@ const app = {
                 _this.prevSong();
             } 
             audio.play()
+            _this.render()
+            _this.scrollToActiveSong()
         }
         //Xu ly random bai hat
         randomBtn.onclick = function(){
             _this.isRandom = !_this.isRandom
+            _this.setConfig('isRandom', _this.isRandom)
             randomBtn.classList.toggle('active', _this.isRandom)
         }
         // Xu ly next song khi audio ended
         audio.onended = function () {
-            nextBtn.click();
+            if(_this.isRepeat){
+                audio.play();
+            } else {
+                nextBtn.click();
+            }
+        }
+        //Xu ly repeat song
+        repeatBtn.onclick = function() {
+            _this.isRepeat = !_this.isRepeat
+            _this.setConfig('isRepeat', _this.isRepeat)
+            repeatBtn.classList.toggle('active', _this.isRepeat)
+        }
+        // Xu ly click vao playlist
+        playlist.onclick = function(e) {
+            const songNode = e.target.closest('.song:not(.active)')
+            const optionNode = e.target.closest('.option')
+            if(songNode || optionNode){
+                //Xu ly khi click vao song
+                if(songNode){
+                    _this.currentIndex = Number(songNode.dataset.index)
+                    _this.loadCurrentSong()
+                    _this.render()
+                    audio.play()
+                }
+                //Xu ly option
+                if(optionNode){
+                    alert('Chưa cập nhật!')
+                }
+            }
         }
     },
 
@@ -212,7 +263,29 @@ const app = {
         this.currentIndex = newIndex;
         this.loadCurrentSong();
     }, 
+
+    scrollToActiveSong: function(){
+        setTimeout(() => {
+            $('.song.active').scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            })
+        }, 300)
+        
+    },
+
+    loadConfig: function() {
+        this.isRandom = this.config.isRandom
+        this.isRepeat = this.config.isRepeat
+    },
+
+    updateProgressColor: function(percent){
+        progress.style.background = `linear-gradient(to right, var(--primary-color) 0%, var(--primary-color) ${percent}%, #d3d3d3 ${percent}%)`;
+    },
+
     start : function() {
+        //Gan cau hinh tu config vao app
+        this.loadConfig();
         //Dinh nghia cac thuoc tinh cho object
         this.defineProperties();
         //Lang nghe / xu ly su kien (DOM Events)
@@ -221,6 +294,9 @@ const app = {
         this.loadCurrentSong();
         //Render playlist
         this.render();
+        //Hien thi trang thai ban dau cua btn random va btn repeat
+        randomBtn.classList.toggle('active', this.isRandom)
+        repeatBtn.classList.toggle('active', this.isRepeat)
     }
 
     
